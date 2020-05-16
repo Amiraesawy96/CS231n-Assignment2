@@ -171,16 +171,16 @@ class FullyConnectedNet(object):
         # in W1 and b1; for the second layer use W2 and b2, etc. Weights should be #
         # initialized from a normal distribution with standard deviation equal to  #
         # weight_scale and biases should be initialized to zero.                   #
-        #                                                                          #
+        #     parameters["W" + str(l+1)]                                                                     #
         # When using batch normalization, store scale and shift parameters for the #
         # first layer in gamma1 and beta1; for the second layer use gamma2 and     #
         # beta2, etc. Scale parameters should be initialized to one and shift      #
         # parameters should be initialized to zero.                                #
         ############################################################################
         dims = np.hstack((input_dim, hidden_dims, num_classes))
-        for i in range(self.num_layer):
-            self.params['W%d' % (i + 1)] = weight_scale * np.random.randn(dims[i], dims[i+1]) 
-            self.params['b%d' % (i + 1)] = np.zeros(dims[i+1])
+        for i in range(self.num_layers):
+            self.params['W' + str(i + 1)] = weight_scale * np.random.randn(dims[i], dims[i+1]) 
+            self.params['b' + str(i + 1)] = np.zeros(dims[i+1])
  
         
         pass
@@ -204,7 +204,10 @@ class FullyConnectedNet(object):
         # pass of the second batch normalization layer, etc.
         self.bn_params = []
         if self.use_batchnorm:
-            self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)]
+            self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)] 
+            for i in range(self.num_layers - 1):
+                self.params['gamma' + str(i + 1)] =np.ones(dims[i+1])
+                self.params['beta' + str(i + 1)]= np.ones(dims[i+1])
 
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
@@ -227,6 +230,7 @@ class FullyConnectedNet(object):
         if self.use_batchnorm:
             for bn_param in self.bn_params:
                 bn_param['mode'] = mode
+                
 
         scores = None
         ############################################################################
@@ -241,6 +245,30 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
+        L2reg = 0
+        hidden_num = self.num_layers - 1
+        scores = X
+        cache_history = []
+        for i in range (hidden_num):
+            if self.use_batchnorm:
+                scores,cache = affine_bn_relu_forward(scores, self.params['W' + str(i + 1)],self.params['b' + str(i + 1)], 
+                                                      self.params['gamma' + str(i + 1)],
+                                                      self.params['beta' + str(i + 1)],self.bn_params[i])
+            else:
+                scores,cache =  affine_relu_forward(scores, self.params['W' + str(i + 1)],self.params['b' + str(i + 1)])
+            cache_history.append(cache) 
+            
+            if self.use_dropout:
+                scores, cache = dropout_forward(scores, self.dropout_param)
+                cache_history.append(cache)
+            L2reg += np.sum(self.params['W' +str (i + 1)] ** 2)
+        i += 1
+        scores, cache = affine_forward(scores, self.params['W' + str(i + 1)],
+                                               self.params['b' + str(i + 1)])
+        cache_history.append(cache)
+        L2reg += np.sum(self.params['W' + str(i + 1)] ** 2)
+        L2reg *= 0.5 * self.reg
+
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -264,6 +292,27 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
+        loss, dout = softmax_loss(scores, y)
+        loss += L2reg
+        dout, grads['W' +str(i + 1)], grads['b' +str(i + 1)] = affine_backward(dout, cache_history.pop())
+        grads['W'  +str(i + 1)] += self.reg * self.params['W' + str(i + 1)]
+        
+        
+        i -= 1
+        while i >= 0:
+            if self.use_dropout:
+                dout = dropout_backward(dout, cache_history.pop())
+            if self.use_batchnorm:
+                dout, grads['W'  +str(i + 1)], grads['b' +str(i + 1)], grads['gamma' +str(i + 1)], grads['beta' + str(i + 1)]                                                                                          =affine_bn_relu_backward(dout, cache_history.pop())
+            else:
+                dout, grads['W'  +str(i + 1)], grads['b' +str(i + 1)] = affine_relu_backward(dout, cache_history.pop())
+            
+            
+            grads['W'  +str(i + 1)] += self.reg * self.params['W'  +str(i + 1)]
+            
+            i -= 1
+
+            
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
