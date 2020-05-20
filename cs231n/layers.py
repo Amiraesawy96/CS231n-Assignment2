@@ -338,9 +338,10 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         #mask = np.random.rand(*x.shape)
         #mask = (mask < p) / p
-        mask = (np.random.rand(*x.shape) >= p) / (1 - p)
+#         mask = (np.random.rand(*x.shape) >= p) / (1 - p)
+
+        mask = (np.random.rand(*x.shape) < p) / p
         out = x * mask
-        
         pass
         #######################################################################
         #                           END OF YOUR CODE                          #
@@ -414,7 +415,29 @@ def conv_forward_naive(x, w, b, conv_param):
     ###########################################################################
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
-    ###########################################################################
+    ########################################################################### out = None
+
+    
+    pad = conv_param ['pad']
+    stride = conv_param ['stride']
+    (N, C, H, W) = x.shape
+    (F, C, HH, WW) = w.shape  # dimensions of the filter 
+  
+    output_height = 1+ (H - F + 2*pad) // stride 
+    output_width = 1+ (W - F + 2*pad) // stride
+    
+    padding =np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+    
+    out = np.zeros((N, F, output_height, output_width))
+    
+    
+    for n in range(N):
+        for f in range(F):
+            for j in range( output_height):
+                for i in range(output_width):
+                    out[n, f, j, i] =np.sum (padding[:, :, j*stride:j*stride+HH, i*stride:i*stride+WW] * w[f]) + b[f]
+
+
     pass
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -437,6 +460,41 @@ def conv_backward_naive(dout, cache):
     - db: Gradient with respect to b
     """
     dx, dw, db = None, None, None
+    ###########################################################################
+    # TODO: Implement the convolutional backward pass.                        #
+    ###########################################################################
+    pad = conv_param ['pad']
+    stride = conv_param ['stride'] 
+    
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+
+    padding = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+    height_output = 1 + (H + 2 * pad - HH) / stride  
+    width_output = 1 + (W + 2 * pad - WW) / stride
+
+    # initialize the outputs 
+    dxPadded = np.zeros_like(padding)
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    
+# After making the conv diagram, the steps to the get the gradient are as follows
+  #  y = wx+b
+ # the idea from the link https://towardsdatascience.com/backpropagation-in-a-convolutional-layer-24c8d64d8509   
+    for n in range(N):
+        for f in range(F):
+            db[f] += np.sum(dout[n, f])
+            for j in range(0, height_output):
+                for i in range(0, width_output):
+                    dw[f] += padding[n, :, j * stride:j * stride + HH, i * stride:i * stride + WW] * dout[n, f, j, i]
+                    padding[n, :, j * stride:j * stride + HH, i * stride:i * stride + WW] += w[f] * dout[n, f, j, i]
+    # Extract dx from dx_pad
+    dx = dxPadded[:, :, pad:pad+H, pad:pad+W]
+
+    
+    
+    
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
